@@ -1,0 +1,10 @@
+.git
+.idea
+.cursor
+tmp
+bin
+dist
+coverage
+**/*.log
+
+

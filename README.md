@@ -1,93 +1,158 @@
 # chat-message-mgz
 
+Микросервис чатов и сообщений на Go + gRPC.
 
+Технические решения:
+- PostgreSQL драйвер: `pgx` (`pgxpool`)
+- ID чатов: UUIDv7 (генерируются в приложении)
+- `message_id` генерируется как `BIGINT` в рамках конкретного чата (1,2,3...)
 
-## Getting started
+## Что уже заложено
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+- Контракт gRPC в `gRPC/service.proto`
+- gRPC сервер в `cmd/main.go`
+- Реализованные gRPC handlers в `internal/transport/grpc/chat/server.go`
+- Слоистый каркас:
+  - `internal/storage/postgres` (инициализация пула)
+  - `internal/repository/chat` и `internal/repository/messeg` (SQL-реализация по доменам)
+  - `internal/repository/interfaces.go` (интерфейсы)
+  - `internal/usecase/chat` (бизнес-слой/use-case через интерфейсы репозиториев)
+  - `internal/domain` (домен-модели)
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+## Методы сервиса (MVP)
 
-## Add your files
+- `CreateDirectChat` - создать чат между 2 пользователями (без дубликатов)
+- `DeleteChat` - удалить чат
+- `CreateMessage` - создать сообщение (статус по умолчанию `sent`)
+- `SendMessage` - отправить сообщение в чат (`chat_id`, `sender_user_id`, `text`)
+- `UpdateMessageStatus` - обновить статус сообщения
+- `GetChatPreview` - получить превью чата (последнее сообщение + время)
+- `GetLastMessages` - получить последние сообщения (по умолчанию 50) с cursor-пагинацией через `before_message_id`
+- `ListUserChats` - получить список чатов пользователя (`other_user_id`, `unread_count`, last message), по умолчанию 15 чатов
+- `MarkChatRead` - массово отметить входящие сообщения в чате как `read`
 
-* [Create](https://docs.gitlab.com/user/project/repository/web_editor/#create-a-file) or [upload](https://docs.gitlab.com/user/project/repository/web_editor/#upload-a-file) files
-* [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+## Установка зависимостей для генерации
 
+```powershell
+go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
+go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/siffka/chat-message-mgz.git
-git branch -M main
-git push -uf origin main
+
+Убедись, что `%USERPROFILE%\go\bin` есть в `PATH`.
+
+## Генерация protobuf/gRPC кода
+
+Запускать из корня проекта:
+
+```powershell
+protoc --proto_path=. --go_out=. --go_opt=module=gitlab.com/siffka/chat-message-mgz --go-grpc_out=. --go-grpc_opt=module=gitlab.com/siffka/chat-message-mgz gRPC/service.proto
 ```
 
-## Integrate with your tools
+После этого сгенерируются файлы:
 
-* [Set up project integrations](https://gitlab.com/siffka/chat-message-mgz/-/settings/integrations)
+- `pkg/api/chat/v1/service.pb.go`
+- `pkg/api/chat/v1/service_grpc.pb.go`
 
-## Collaborate with your team
+## SQL схема
 
-* [Invite team members and collaborators](https://docs.gitlab.com/user/project/members/)
-* [Create a new merge request](https://docs.gitlab.com/user/project/merge_requests/creating_merge_requests/)
-* [Automatically close issues from merge requests](https://docs.gitlab.com/user/project/issues/managing_issues/#closing-issues-automatically)
-* [Enable merge request approvals](https://docs.gitlab.com/user/project/merge_requests/approvals/)
-* [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+Схема хранится в миграциях `migrations/`:
 
-## Test and Deploy
+- `001_init.up.sql` — применить всю схему
+- `001_init.down.sql` — откатить схему
 
-Use the built-in continuous integration in GitLab.
+- `chats`
+- `messages`
+- `chat_user_state` (персональный read-cursor пользователя в чате)
+- enum `message_status` (`sent`, `delivered`, `read`)
+- триггеры на `updated_at`, preview чата и валидатор переходов статусов (FSM)
 
-* [Get started with GitLab CI/CD](https://docs.gitlab.com/ci/quick_start/)
-* [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/user/application_security/sast/)
-* [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/topics/autodevops/requirements/)
-* [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/user/clusters/agent/)
-* [Set up protected environments](https://docs.gitlab.com/ci/environments/protected_environments/)
+Применение миграции вручную:
 
-***
+```powershell
+psql "$env:DATABASE_URL" -f .\migrations\001_init.up.sql
+```
 
-# Editing this README
+Откат:
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+```powershell
+psql "$env:DATABASE_URL" -f .\migrations\001_init.down.sql
+```
 
-## Suggestions for a good README
+Важно: в схеме `id` без `DEFAULT`, потому что UUIDv7 генерируется в Go-коде репозитория.
+Для `messages.id` используется инкремент внутри чата через `chats.last_message_id`.
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+## Локальный запуск без Docker
 
-## Name
-Choose a self-explaining name for your project.
+```powershell
+go mod tidy
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/chat_message?sslmode=disable"
+go run .\cmd
+```
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+По умолчанию сервер слушает `:50051`. Порт можно задать через `GRPC_PORT`.
+`DATABASE_URL` обязателен.
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+Минимум репозиторных интерфейсов разделен на:
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+- `ChatRepository` — операции чатов и превью
+- `MessageRepository` — операции сообщений и read/update статусов
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+## Запуск через Docker Compose
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+Поднимаются 3 контейнера:
+- `postgres` (БД)
+- `migrate` (одноразовый контейнер, применяет `migrations/*.up.sql` и завершается)
+- `app` (gRPC сервис)
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+```powershell
+docker compose up --build
+```
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+Остановить:
 
-## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
+```powershell
+docker compose down
+```
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
+Остановить и удалить volume с данными БД:
 
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
+```powershell
+docker compose down -v
+```
 
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+## Smoke-тест клиента
 
-## License
-For open source projects, say how it is licensed.
+Для проверки есть минимальный gRPC клиент `cmd/client`.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+Пример сценария:
+
+```powershell
+# 1) Создать чат
+go run ./cmd/client create-chat --user1 11111111-1111-1111-1111-111111111111 --user2 22222222-2222-2222-2222-222222222222
+
+# 2) Отправить сообщение
+go run ./cmd/client send-message --chat <chat_id> --sender 11111111-1111-1111-1111-111111111111 --text "привет"
+
+# 3) Список чатов пользователя
+go run ./cmd/client list-chats --user 11111111-1111-1111-1111-111111111111
+
+# 4) Сообщения чата
+go run ./cmd/client get-messages --chat <chat_id> --limit 50
+```
+
+Для `GetChatPreview` клиент автоматически отправляет `x-user-id` и `x-trace-id`.
+
+## Swagger / OpenAPI
+
+Файл документации:
+- `docs/swagger.yaml`
+
+Быстро открыть Swagger UI локально:
+
+```powershell
+docker run --rm -p 8081:8080 -e SWAGGER_JSON=/foo/swagger.yaml -v "${PWD}/docs:/foo" swaggerapi/swagger-ui
+```
+
+После запуска открой:
+- [http://localhost:8081](http://localhost:8081)
+
