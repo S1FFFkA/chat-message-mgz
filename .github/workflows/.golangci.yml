@@ -10,9 +10,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  ci:
-    name: Test and build
+  build:
+    name: Build
     runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Download deps
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    needs: build
 
     steps:
       - name: Checkout
@@ -30,12 +51,9 @@ jobs:
       - name: Run tests
         run: go test ./... -count=1
 
-      - name: Build
-        run: go build ./...
-
   deploy:
     name: Deploy to server
-    needs: ci
+    needs: test
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
