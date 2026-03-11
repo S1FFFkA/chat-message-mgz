@@ -1,9 +1,0 @@
-name: Super Simple Test
-
-on: [push]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - run: echo "🎉 Ура! CI/CD запустился!"
