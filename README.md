@@ -7,9 +7,19 @@
 - ID чатов: UUIDv7 (генерируются в приложении)
 - `message_id` генерируется как `BIGINT` в рамках конкретного чата (1,2,3...)
 
+## Что уже заложено
 
+- Контракт gRPC в `gRPC/service.proto`
+- gRPC сервер в `cmd/main.go`
+- Реализованные gRPC handlers в `internal/transport/grpc/chat/server.go`
+- Слоистый каркас:
+  - `internal/storage/postgres` (инициализация пула)
+  - `internal/repository/chat` и `internal/repository/messeg` (SQL-реализация по доменам)
+  - `internal/repository/interfaces.go` (интерфейсы)
+  - `internal/usecase/chat` (бизнес-слой/use-case через интерфейсы репозиториев)
+  - `internal/domain` (домен-модели)
 
-## Методы сервиса 
+## Методы сервиса (MVP)
 
 - `CreateDirectChat` - создать чат между 2 пользователями (без дубликатов)
 - `DeleteChat` - удалить чат
@@ -43,7 +53,49 @@ protoc --proto_path=. --go_out=. --go_opt=module=gitlab.com/siffka/chat-message-
 - `pkg/api/chat/v1/service.pb.go`
 - `pkg/api/chat/v1/service_grpc.pb.go`
 
+## SQL схема
 
+Схема хранится в миграциях `migrations/`:
+
+- `001_init.up.sql` — применить всю схему
+- `001_init.down.sql` — откатить схему
+
+- `chats`
+- `messages`
+- `chat_user_state` (персональный read-cursor пользователя в чате)
+- enum `message_status` (`sent`, `delivered`, `read`)
+- триггеры на `updated_at`, preview чата и валидатор переходов статусов (FSM)
+
+Применение миграции вручную:
+
+```powershell
+psql "$env:DATABASE_URL" -f .\migrations\001_init.up.sql
+```
+
+Откат:
+
+```powershell
+psql "$env:DATABASE_URL" -f .\migrations\001_init.down.sql
+```
+
+Важно: в схеме `id` без `DEFAULT`, потому что UUIDv7 генерируется в Go-коде репозитория.
+Для `messages.id` используется инкремент внутри чата через `chats.last_message_id`.
+
+## Локальный запуск без Docker
+
+```powershell
+go mod tidy
+$env:DATABASE_URL="postgres://postgres:postgres@localhost:5432/chat_message?sslmode=disable"
+go run .\cmd
+```
+
+По умолчанию сервер слушает `:50051`. Порт можно задать через `GRPC_PORT`.
+`DATABASE_URL` обязателен.
+
+Минимум репозиторных интерфейсов разделен на:
+
+- `ChatRepository` — операции чатов и превью
+- `MessageRepository` — операции сообщений и read/update статусов
 
 ## Запуск через Docker Compose
 
