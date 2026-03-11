@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 
+	"gitlab.com/siffka/chat-message-mgz/internal/cache/chatcache"
 	"gitlab.com/siffka/chat-message-mgz/internal/config"
 	chatrepo "gitlab.com/siffka/chat-message-mgz/internal/repository/chat"
 	messagerepo "gitlab.com/siffka/chat-message-mgz/internal/repository/messeg"
@@ -43,6 +44,22 @@ func main() {
 	chatRepo := chatrepo.NewRepository(pool)
 	messageRepo := messagerepo.NewRepository(pool)
 	chatService := chatsvc.NewService(chatRepo, messageRepo)
+	if cfg.RedisAddr != "" {
+		redisClient := chatcache.NewRedisClient(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+		defer func() {
+			_ = redisClient.Close()
+		}()
+		cache := chatcache.New(redisClient, cfg.CacheTTL)
+		if err = cache.Ping(ctx); err != nil {
+			log.Warn("redis is configured but not reachable, cache is disabled", zap.Error(err))
+		} else {
+			chatService = chatsvc.NewServiceWithCache(chatRepo, messageRepo, cache)
+			log.Info("redis cache enabled",
+				zap.String("redis_addr", cfg.RedisAddr),
+				zap.Duration("cache_ttl", cfg.CacheTTL),
+			)
+		}
+	}
 
 	lis, err := net.Listen("tcp", ":"+cfg.GRPCPort)
 	if err != nil {

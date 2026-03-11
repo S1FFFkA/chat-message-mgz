@@ -44,11 +44,23 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      redis:
+        condition: service_started
     environment:
       GRPC_PORT: "50051"
       DATABASE_URL: "postgres://postgres:postgres@postgres:5432/chat_message?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      REDIS_DB: "0"
+      CACHE_TTL: "20m"
     ports:
       - "50051:50051"
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: chat-redis
+    ports:
+      - "6379:6379"
     restart: unless-stopped
 
 volumes:

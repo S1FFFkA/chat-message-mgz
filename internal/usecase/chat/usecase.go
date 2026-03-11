@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"gitlab.com/siffka/chat-message-mgz/internal/cache/chatcache"
 	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 	"gitlab.com/siffka/chat-message-mgz/internal/repository"
 )
@@ -45,12 +46,21 @@ type UseCase interface {
 type Service struct {
 	chatRepo    repository.ChatRepository
 	messageRepo repository.MessageRepository
+	cache       *chatcache.Cache
 }
 
 func NewService(chatRepo repository.ChatRepository, messageRepo repository.MessageRepository) *Service {
 	return &Service{
 		chatRepo:    chatRepo,
 		messageRepo: messageRepo,
+	}
+}
+
+func NewServiceWithCache(chatRepo repository.ChatRepository, messageRepo repository.MessageRepository, cache *chatcache.Cache) *Service {
+	return &Service{
+		chatRepo:    chatRepo,
+		messageRepo: messageRepo,
+		cache:       cache,
 	}
 }
 
@@ -61,7 +71,13 @@ func (s *Service) CreateDirectChat(ctx context.Context, user1ID, user2ID uuid.UU
 	if user1ID == user2ID {
 		return domain.Chat{}, ErrSelfChat
 	}
-	return s.chatRepo.CreateDirectChat(ctx, user1ID, user2ID)
+	chat, err := s.chatRepo.CreateDirectChat(ctx, user1ID, user2ID)
+	if err != nil {
+		return domain.Chat{}, mapRepoError(err, "chat not found")
+	}
+	s.invalidateUsers(ctx, user1ID, user2ID)
+	s.touchUsers(ctx, user1ID, user2ID)
+	return chat, nil
 }
 
 func (s *Service) DeleteChat(ctx context.Context, chatID uuid.UUID) error {
@@ -88,6 +104,8 @@ func (s *Service) CreateMessage(ctx context.Context, chatID, userID uuid.UUID, t
 	if err != nil {
 		return domain.Message{}, mapRepoError(err, "chat not found")
 	}
+	s.invalidateUsers(ctx, userID)
+	s.touchUsers(ctx, userID)
 	return msg, nil
 }
 
@@ -116,9 +134,19 @@ func (s *Service) GetChatPreview(ctx context.Context, chatID, userID uuid.UUID) 
 	if chatID == uuid.Nil || userID == uuid.Nil {
 		return domain.ChatPreview{}, ErrInvalidArgument
 	}
+	s.touchUsers(ctx, userID)
+	if s.cache != nil {
+		cached, found, err := s.cache.GetChatPreview(ctx, userID, chatID)
+		if err == nil && found {
+			return cached, nil
+		}
+	}
 	preview, err := s.chatRepo.GetChatPreview(ctx, chatID, userID)
 	if err != nil {
 		return domain.ChatPreview{}, mapRepoError(err, "chat not found")
+	}
+	if s.cache != nil {
+		_ = s.cache.SetChatPreview(ctx, userID, chatID, preview)
 	}
 	return preview, nil
 }
@@ -156,9 +184,19 @@ func (s *Service) ListUserChats(ctx context.Context, userID uuid.UUID, limit, of
 	if offset < 0 {
 		offset = 0
 	}
+	s.touchUsers(ctx, userID)
+	if s.cache != nil {
+		cached, found, err := s.cache.GetUserChats(ctx, userID, limit, offset)
+		if err == nil && found {
+			return cached, nil
+		}
+	}
 	chats, err := s.chatRepo.ListUserChats(ctx, userID, limit, offset)
 	if err != nil {
 		return nil, mapRepoError(err, "user chats not found")
+	}
+	if s.cache != nil {
+		_ = s.cache.SetUserChats(ctx, userID, limit, offset, chats)
 	}
 	return chats, nil
 }
@@ -174,7 +212,33 @@ func (s *Service) MarkChatRead(ctx context.Context, chatID, userID uuid.UUID, up
 	if err != nil {
 		return 0, mapRepoError(err, "chat not found")
 	}
+	s.invalidateUsers(ctx, userID)
+	s.touchUsers(ctx, userID)
 	return updated, nil
+}
+
+func (s *Service) touchUsers(ctx context.Context, userIDs ...uuid.UUID) {
+	if s.cache == nil {
+		return
+	}
+	for _, userID := range userIDs {
+		if userID == uuid.Nil {
+			continue
+		}
+		_ = s.cache.TouchUser(ctx, userID)
+	}
+}
+
+func (s *Service) invalidateUsers(ctx context.Context, userIDs ...uuid.UUID) {
+	if s.cache == nil {
+		return
+	}
+	for _, userID := range userIDs {
+		if userID == uuid.Nil {
+			continue
+		}
+		_ = s.cache.InvalidateUser(ctx, userID)
+	}
 }
 
 func mapRepoError(err error, notFoundMessage string) error {
