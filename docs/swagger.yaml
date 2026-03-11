@@ -1,0 +1,451 @@
+openapi: 3.0.3
+info:
+  title: Chat Message Service API
+  version: 1.0.0
+  description: |
+    REST facade documentation for ChatMessage gRPC service.
+    Errors are intentionally sanitized for clients.
+
+servers:
+  - url: http://localhost:8080
+    description: Example API Gateway URL
+
+tags:
+  - name: chats
+  - name: messages
+
+paths:
+  /v1/chats/direct:
+    post:
+      tags: [chats]
+      summary: Create direct chat
+      operationId: createDirectChat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateDirectChatRequest'
+      responses:
+        '200':
+          description: Chat created or returned if already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateDirectChatResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/chats/{chat_id}:
+    delete:
+      tags: [chats]
+      summary: Delete chat
+      operationId: deleteChat
+      parameters:
+        - $ref: '#/components/parameters/ChatID'
+      responses:
+        '200':
+          description: Chat deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DeleteChatResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/messages:
+    post:
+      tags: [messages]
+      summary: Create message
+      operationId: createMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateMessageRequest'
+      responses:
+        '200':
+          description: Message created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateMessageResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/messages/send:
+    post:
+      tags: [messages]
+      summary: Send message
+      operationId: sendMessage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SendMessageRequest'
+      responses:
+        '200':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SendMessageResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/chats/{chat_id}/messages/{message_id}/status:
+    patch:
+      tags: [messages]
+      summary: Update message status
+      operationId: updateMessageStatus
+      parameters:
+        - $ref: '#/components/parameters/ChatID'
+        - $ref: '#/components/parameters/MessageID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  $ref: '#/components/schemas/MessageStatus'
+      responses:
+        '200':
+          description: Message status updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateMessageStatusResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/chats/{chat_id}/preview:
+    get:
+      tags: [chats]
+      summary: Get chat preview
+      operationId: getChatPreview
+      parameters:
+        - $ref: '#/components/parameters/ChatID'
+        - $ref: '#/components/parameters/XUserID'
+      responses:
+        '200':
+          description: Chat preview
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetChatPreviewResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/chats/{chat_id}/messages:
+    get:
+      tags: [messages]
+      summary: Get last messages
+      operationId: getLastMessages
+      parameters:
+        - $ref: '#/components/parameters/ChatID'
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            format: int32
+            default: 50
+        - in: query
+          name: before_message_id
+          schema:
+            type: integer
+            format: int64
+            description: If empty, starts from latest.
+      responses:
+        '200':
+          description: Messages page
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GetLastMessagesResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/users/{user_id}/chats:
+    get:
+      tags: [chats]
+      summary: List user chats
+      operationId: listUserChats
+      parameters:
+        - in: path
+          name: user_id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            format: int32
+            default: 15
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            format: int32
+            default: 0
+      responses:
+        '200':
+          description: Chat previews
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListUserChatsResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /v1/chats/{chat_id}:markRead:
+    post:
+      tags: [chats]
+      summary: Mark chat read
+      operationId: markChatRead
+      parameters:
+        - $ref: '#/components/parameters/ChatID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                up_to_message_id:
+                  type: integer
+                  format: int64
+      responses:
+        '200':
+          description: Number of newly marked messages
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MarkChatReadResponse'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  parameters:
+    ChatID:
+      in: path
+      name: chat_id
+      required: true
+      schema:
+        type: string
+        format: uuid
+    MessageID:
+      in: path
+      name: message_id
+      required: true
+      schema:
+        type: integer
+        format: int64
+    XUserID:
+      in: header
+      name: x-user-id
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    MessageStatus:
+      type: string
+      enum: [MESSAGE_STATUS_UNSPECIFIED, MESSAGE_STATUS_SENT, MESSAGE_STATUS_DELIVERED, MESSAGE_STATUS_READ]
+
+    Chat:
+      type: object
+      required: [id, user1_id, user2_id, created_at]
+      properties:
+        id:
+          type: string
+          format: uuid
+        user1_id:
+          type: string
+          format: uuid
+        user2_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+
+    Message:
+      type: object
+      required: [id, chat_id, sender_user_id, text, status, created_at, updated_at]
+      properties:
+        id:
+          type: integer
+          format: int64
+        chat_id:
+          type: string
+          format: uuid
+        sender_user_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        status:
+          $ref: '#/components/schemas/MessageStatus'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    ChatPreview:
+      type: object
+      required: [chat_id, other_user_id, unread_count]
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+        other_user_id:
+          type: string
+          format: uuid
+        last_message:
+          $ref: '#/components/schemas/Message'
+        last_message_at:
+          type: string
+          format: date-time
+          nullable: true
+        unread_count:
+          type: integer
+          format: int64
+
+    CreateDirectChatRequest:
+      type: object
+      required: [user1_id, user2_id]
+      properties:
+        user1_id:
+          type: string
+          format: uuid
+        user2_id:
+          type: string
+          format: uuid
+
+    CreateDirectChatResponse:
+      type: object
+      required: [chat]
+      properties:
+        chat:
+          $ref: '#/components/schemas/Chat'
+
+    DeleteChatResponse:
+      type: object
+      additionalProperties: false
+
+    CreateMessageRequest:
+      type: object
+      required: [chat_id, sender_user_id, text]
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+        sender_user_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+
+    CreateMessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+
+    SendMessageRequest:
+      type: object
+      required: [chat_id, sender_user_id, text]
+      properties:
+        chat_id:
+          type: string
+          format: uuid
+        sender_user_id:
+          type: string
+          format: uuid
+        text:
+          type: string
+        client_message_id:
+          type: string
+          description: Optional idempotency key
+
+    SendMessageResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+
+    UpdateMessageStatusResponse:
+      type: object
+      required: [message]
+      properties:
+        message:
+          $ref: '#/components/schemas/Message'
+
+    GetChatPreviewResponse:
+      type: object
+      required: [preview]
+      properties:
+        preview:
+          $ref: '#/components/schemas/ChatPreview'
+
+    GetLastMessagesResponse:
+      type: object
+      required: [messages, has_more]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: '#/components/schemas/Message'
+        has_more:
+          type: boolean
+
+    ListUserChatsResponse:
+      type: object
+      required: [chats]
+      properties:
+        chats:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChatPreview'
+
+    MarkChatReadResponse:
+      type: object
+      required: [updated_messages]
+      properties:
+        updated_messages:
+          type: integer
+          format: int64
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          example: internal server error
+
+
