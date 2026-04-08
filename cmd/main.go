@@ -3,7 +3,8 @@ package main
 import (
 	"context"
 	"net"
-
+	"net/http"
+    "github.com/prometheus/client_golang/prometheus/promhttp"
 	"gitlab.com/siffka/chat-message-mgz/internal/cache/chatcache"
 	"gitlab.com/siffka/chat-message-mgz/internal/config"
 	chatrepo "gitlab.com/siffka/chat-message-mgz/internal/repository/chat"
@@ -68,7 +69,15 @@ func main() {
 			zap.Error(err),
 		)
 	}
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.Handler())
 
+	go func() {
+    	if err := http.ListenAndServe(":9101", metricsMux); err != nil {
+        	log.Warn("metrics server stopped", zap.Error(err))
+    	}
+	}()
+	
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(grpcmw.UnaryTraceInterceptor()),
 	)
