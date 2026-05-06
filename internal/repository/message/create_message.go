@@ -1,11 +1,11 @@
-package repository
+package message
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/google/uuid"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 func (r *Repository) CreateMessage(ctx context.Context, chatID, userID uuid.UUID, text string) (domain.Message, error) {

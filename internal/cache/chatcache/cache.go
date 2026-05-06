@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 type Cache struct {

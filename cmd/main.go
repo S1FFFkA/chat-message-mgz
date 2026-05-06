@@ -4,17 +4,18 @@ import (
 	"context"
 	"net"
 
-	"gitlab.com/siffka/chat-message-mgz/internal/cache/chatcache"
-	"gitlab.com/siffka/chat-message-mgz/internal/config"
-	chatrepo "gitlab.com/siffka/chat-message-mgz/internal/repository/chat"
-	messagerepo "gitlab.com/siffka/chat-message-mgz/internal/repository/messeg"
-	pgstorage "gitlab.com/siffka/chat-message-mgz/internal/storage/postgres"
-	chattransport "gitlab.com/siffka/chat-message-mgz/internal/transport/grpc/chat"
-	grpcmw "gitlab.com/siffka/chat-message-mgz/internal/transport/grpc/middleware"
-	chatsvc "gitlab.com/siffka/chat-message-mgz/internal/usecase/chat"
-	"gitlab.com/siffka/chat-message-mgz/pkg/logger"
+	"github.com/S1FFFkA/chat-message-mgz/internal/cache/chatcache"
+	"github.com/S1FFFkA/chat-message-mgz/internal/config"
+	"github.com/S1FFFkA/chat-message-mgz/internal/events"
+	chatrepo "github.com/S1FFFkA/chat-message-mgz/internal/repository/chat"
+	msgrepo "github.com/S1FFFkA/chat-message-mgz/internal/repository/message"
+	pgstorage "github.com/S1FFFkA/chat-message-mgz/internal/storage/postgres"
+	chattransport "github.com/S1FFFkA/chat-message-mgz/internal/transport/grpc/chat"
+	grpcmw "github.com/S1FFFkA/chat-message-mgz/internal/transport/grpc/middleware"
+	chatsvc "github.com/S1FFFkA/chat-message-mgz/internal/usecase/chat"
+	"github.com/S1FFFkA/chat-message-mgz/pkg/logger"
 
-	chatv1 "gitlab.com/siffka/chat-message-mgz/pkg/api/chat/v1"
+	chatv1 "github.com/S1FFFkA/chat-message-mgz/pkg/api/chat/v1"
 	"go.uber.org/zap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"
@@ -42,8 +43,24 @@ func main() {
 	defer pool.Close()
 
 	chatRepo := chatrepo.NewRepository(pool)
-	messageRepo := messagerepo.NewRepository(pool)
-	chatService := chatsvc.NewService(chatRepo, messageRepo)
+	messageRepo := msgrepo.NewRepository(pool)
+	publisher := events.Publisher(events.NewNoopPublisher())
+	if len(cfg.KafkaBrokers) > 0 {
+		kafkaPublisher, kafkaErr := events.NewKafkaPublisher(cfg.KafkaBrokers, cfg.KafkaTopicChatMessages)
+		if kafkaErr != nil {
+			log.Warn("kafka publisher init failed, events are disabled", zap.Error(kafkaErr))
+		} else {
+			publisher = kafkaPublisher
+			defer func() {
+				_ = kafkaPublisher.Close()
+			}()
+			log.Info("kafka publisher enabled",
+				zap.Strings("brokers", cfg.KafkaBrokers),
+				zap.String("topic", cfg.KafkaTopicChatMessages),
+			)
+		}
+	}
+	chatService := chatsvc.NewServiceWithDeps(chatRepo, messageRepo, nil, publisher)
 	if cfg.RedisAddr != "" {
 		redisClient := chatcache.NewRedisClient(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
 		defer func() {
@@ -53,7 +70,7 @@ func main() {
 		if err = cache.Ping(ctx); err != nil {
 			log.Warn("redis is configured but not reachable, cache is disabled", zap.Error(err))
 		} else {
-			chatService = chatsvc.NewServiceWithCache(chatRepo, messageRepo, cache)
+			chatService = chatsvc.NewServiceWithDeps(chatRepo, messageRepo, cache, publisher)
 			log.Info("redis cache enabled",
 				zap.String("redis_addr", cfg.RedisAddr),
 				zap.Duration("cache_ttl", cfg.CacheTTL),

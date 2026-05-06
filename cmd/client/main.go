@@ -7,8 +7,8 @@ import (
 	"os"
 	"time"
 
+	chatv1 "github.com/S1FFFkA/chat-message-mgz/pkg/api/chat/v1"
 	"github.com/google/uuid"
-	chatv1 "gitlab.com/siffka/chat-message-mgz/pkg/api/chat/v1"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -24,7 +24,8 @@ func main() {
 
 	addr := os.Getenv("CHAT_GRPC_ADDR")
 	if addr == "" {
-		addr = "localhost:50051"
+		// Prefer IPv4: on Windows, localhost→::1 often breaks Docker-published gRPC ports.
+		addr = "127.0.0.1:50051"
 	}
 
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))

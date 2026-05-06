@@ -6,15 +6,16 @@
 - PostgreSQL драйвер: `pgx` (`pgxpool`)
 - ID чатов: UUIDv7 (генерируются в приложении)
 - `message_id` генерируется как `BIGINT` в рамках конкретного чата (1,2,3...)
+- События новых сообщений публикуются в Kafka (`chat.messages`) для push-воркера
 
 ## Что уже заложено
 
-- Контракт gRPC в `gRPC/service.proto`
+- Контракт gRPC в `grpc/service.proto` (вспомогательно `grpc/google/protobuf/timestamp.proto` для `protoc` без системного include)
 - gRPC сервер в `cmd/main.go`
 - Реализованные gRPC handlers в `internal/transport/grpc/chat/server.go`
 - Слоистый каркас:
   - `internal/storage/postgres` (инициализация пула)
-  - `internal/repository/chat` и `internal/repository/messeg` (SQL-реализация по доменам)
+  - `internal/repository/chat` и `internal/repository/message` (SQL-реализация по доменам)
   - `internal/repository/interfaces.go` (интерфейсы)
   - `internal/usecase/chat` (бизнес-слой/use-case через интерфейсы репозиториев)
   - `internal/domain` (домен-модели)
@@ -45,8 +46,10 @@ go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 Запускать из корня проекта:
 
 ```powershell
-protoc --proto_path=. --go_out=. --go_opt=module=gitlab.com/siffka/chat-message-mgz --go-grpc_out=. --go-grpc_opt=module=gitlab.com/siffka/chat-message-mgz gRPC/service.proto
+protoc -I grpc --go_out=. --go_opt=module=github.com/S1FFFkA/chat-message-mgz --go-grpc_out=. --go-grpc_opt=module=github.com/S1FFFkA/chat-message-mgz grpc/service.proto
 ```
+
+Или: `make proto`.
 
 После этого сгенерируются файлы:
 
@@ -103,6 +106,8 @@ go run .\cmd
 - `postgres` (БД)
 - `migrate` (одноразовый контейнер, применяет `migrations/*.up.sql` и завершается)
 - `app` (gRPC сервис)
+- `redis` (кэш превью/списков чатов)
+- `kafka` (брокер событий новых сообщений)
 
 ```powershell
 docker compose up --build
@@ -141,6 +146,26 @@ go run ./cmd/client get-messages --chat <chat_id> --limit 50
 ```
 
 Для `GetChatPreview` клиент автоматически отправляет `x-user-id` и `x-trace-id`.
+
+## Kafka события
+
+При успешном `CreateMessage` сервис публикует событие в Kafka-топик `chat.messages` (по умолчанию):
+
+- `type` (`message_created`)
+- `chat_id`
+- `message_id`
+- `user_id` (отправитель)
+- `recipient_user_id` (кому отправить push)
+- `message_text`
+- `unread_count` (текущее кол-во непрочитанных у получателя)
+- `occurred_at`
+
+Переменные окружения:
+
+- `KAFKA_BROKERS` — список брокеров через запятую (например `127.0.0.1:9092` или `kafka:9092`)
+- `KAFKA_TOPIC_CHAT_MESSAGES` — имя топика (по умолчанию `chat.messages`)
+
+Если `KAFKA_BROKERS` не задан, сервис работает без публикации событий (noop publisher).
 
 ## Swagger / OpenAPI
 

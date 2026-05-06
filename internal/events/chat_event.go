@@ -18,6 +18,9 @@ type ChatUpdatedEvent struct {
 	ChatID          uuid.UUID
 	MessageID       int64
 	UserID          uuid.UUID
+	RecipientUserID uuid.UUID
+	MessageText     string
+	UnreadCount     int64
 	Type            ChatEventType
 	UpdatedMessages int64
 	OccurredAt      time.Time

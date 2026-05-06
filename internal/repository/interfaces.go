@@ -3,12 +3,13 @@ package repository
 import (
 	"context"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/google/uuid"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 type ChatRepository interface {
 	CreateDirectChat(ctx context.Context, user1ID, user2ID uuid.UUID) (domain.Chat, error)
+	GetChat(ctx context.Context, chatID uuid.UUID) (domain.Chat, error)
 	DeleteChat(ctx context.Context, chatID uuid.UUID) error
 	GetChatPreview(ctx context.Context, chatID, userID uuid.UUID) (domain.ChatPreview, error)
 	ListUserChats(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]domain.ChatPreview, error)

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
+	repocore "github.com/S1FFFkA/chat-message-mgz/internal/repository"
 	"github.com/google/uuid"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
-	repocore "gitlab.com/siffka/chat-message-mgz/internal/repository"
 )
 
 func (r *Repository) CreateDirectChat(ctx context.Context, user1ID, user2ID uuid.UUID) (domain.Chat, error) {

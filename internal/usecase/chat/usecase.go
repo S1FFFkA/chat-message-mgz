@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"time"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/cache/chatcache"
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
+	"github.com/S1FFFkA/chat-message-mgz/internal/events"
+	"github.com/S1FFFkA/chat-message-mgz/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"gitlab.com/siffka/chat-message-mgz/internal/cache/chatcache"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
-	"gitlab.com/siffka/chat-message-mgz/internal/repository"
 )
 
 const (
@@ -47,20 +49,26 @@ type Service struct {
 	chatRepo    repository.ChatRepository
 	messageRepo repository.MessageRepository
 	cache       *chatcache.Cache
+	publisher   events.Publisher
 }
 
 func NewService(chatRepo repository.ChatRepository, messageRepo repository.MessageRepository) *Service {
-	return &Service{
-		chatRepo:    chatRepo,
-		messageRepo: messageRepo,
-	}
+	return NewServiceWithDeps(chatRepo, messageRepo, nil, nil)
 }
 
 func NewServiceWithCache(chatRepo repository.ChatRepository, messageRepo repository.MessageRepository, cache *chatcache.Cache) *Service {
+	return NewServiceWithDeps(chatRepo, messageRepo, cache, nil)
+}
+
+func NewServiceWithDeps(chatRepo repository.ChatRepository, messageRepo repository.MessageRepository, cache *chatcache.Cache, publisher events.Publisher) *Service {
+	if publisher == nil {
+		publisher = events.NewNoopPublisher()
+	}
 	return &Service{
 		chatRepo:    chatRepo,
 		messageRepo: messageRepo,
 		cache:       cache,
+		publisher:   publisher,
 	}
 }
 
@@ -104,8 +112,31 @@ func (s *Service) CreateMessage(ctx context.Context, chatID, userID uuid.UUID, t
 	if err != nil {
 		return domain.Message{}, mapRepoError(err, "chat not found")
 	}
-	s.invalidateUsers(ctx, userID)
-	s.touchUsers(ctx, userID)
+	chat, err := s.chatRepo.GetChat(ctx, chatID)
+	if err == nil {
+		recipientID := chat.User1ID
+		if recipientID == userID {
+			recipientID = chat.User2ID
+		}
+		s.invalidateUsers(ctx, userID, recipientID)
+		s.touchUsers(ctx, userID, recipientID)
+		preview, previewErr := s.chatRepo.GetChatPreview(ctx, chatID, recipientID)
+		if previewErr == nil {
+			_ = s.publisher.PublishChatUpdated(ctx, events.ChatUpdatedEvent{
+				ChatID:          chatID,
+				MessageID:       msg.ID,
+				UserID:          userID,
+				RecipientUserID: recipientID,
+				MessageText:     msg.Text,
+				UnreadCount:     preview.UnreadCount,
+				Type:            events.ChatEventTypeMessageCreated,
+				OccurredAt:      time.Now().UTC(),
+			})
+		}
+	} else {
+		s.invalidateUsers(ctx, userID)
+		s.touchUsers(ctx, userID)
+	}
 	return msg, nil
 }
 

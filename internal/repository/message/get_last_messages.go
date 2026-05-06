@@ -1,13 +1,13 @@
-package repository
+package message
 
 import (
 	"context"
 	"fmt"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
+	repocore "github.com/S1FFFkA/chat-message-mgz/internal/repository"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
-	repocore "gitlab.com/siffka/chat-message-mgz/internal/repository"
 )
 
 func (r *Repository) GetLastMessages(ctx context.Context, chatID uuid.UUID, limit int32, beforeMessageID *int64) ([]domain.Message, bool, error) {

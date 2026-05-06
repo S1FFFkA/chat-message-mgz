@@ -7,16 +7,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/cache/chatcache"
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/redis/go-redis/v9"
-	"gitlab.com/siffka/chat-message-mgz/internal/cache/chatcache"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 type fakeChatRepo struct {
 	createDirectChatFn func(ctx context.Context, user1ID, user2ID uuid.UUID) (domain.Chat, error)
+	getChatFn          func(ctx context.Context, chatID uuid.UUID) (domain.Chat, error)
 	deleteChatFn       func(ctx context.Context, chatID uuid.UUID) error
 	getChatPreviewFn   func(ctx context.Context, chatID, userID uuid.UUID) (domain.ChatPreview, error)
 	listUserChatsFn    func(ctx context.Context, userID uuid.UUID, limit, offset int32) ([]domain.ChatPreview, error)
@@ -28,6 +29,13 @@ func (f *fakeChatRepo) CreateDirectChat(ctx context.Context, user1ID, user2ID uu
 
 func (f *fakeChatRepo) DeleteChat(ctx context.Context, chatID uuid.UUID) error {
 	return f.deleteChatFn(ctx, chatID)
+}
+
+func (f *fakeChatRepo) GetChat(ctx context.Context, chatID uuid.UUID) (domain.Chat, error) {
+	if f.getChatFn != nil {
+		return f.getChatFn(ctx, chatID)
+	}
+	return domain.Chat{ID: chatID, User1ID: uuid.New(), User2ID: uuid.New()}, nil
 }
 
 func (f *fakeChatRepo) GetChatPreview(ctx context.Context, chatID, userID uuid.UUID) (domain.ChatPreview, error) {

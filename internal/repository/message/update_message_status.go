@@ -1,4 +1,4 @@
-package repository
+package message
 
 import (
 	"context"
@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 func (r *Repository) UpdateMessageStatus(ctx context.Context, chatID uuid.UUID, messageID int64, status domain.MessageStatus) (domain.Message, error) {

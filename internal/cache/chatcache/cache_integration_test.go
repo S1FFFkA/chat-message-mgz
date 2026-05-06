@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 func TestCacheSetGetAndInvalidateUser(t *testing.T) {

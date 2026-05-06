@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/S1FFFkA/chat-message-mgz/internal/domain"
 	"github.com/google/uuid"
-	"gitlab.com/siffka/chat-message-mgz/internal/domain"
 )
 
 type RowScanner interface {
