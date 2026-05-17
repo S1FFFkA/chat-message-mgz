@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"net"
-
+	"net/http"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	
 	"github.com/S1FFFkA/chat-message-mgz/internal/cache/chatcache"
 	"github.com/S1FFFkA/chat-message-mgz/internal/config"
 	"github.com/S1FFFkA/chat-message-mgz/internal/events"
@@ -85,6 +87,17 @@ func main() {
 			zap.Error(err),
 		)
 	}
+
+	metricsMux := http.NewServeMux()
+	metricsMux.Handle("/metrics", promhttp.Handler())
+
+	go func() {
+		log.Info("metrics server started", zap.String("port", "9101"))
+
+		if err := http.ListenAndServe(":9101", metricsMux); err != nil {
+			log.Warn("metrics server stopped", zap.Error(err))
+		}
+	}()
 
 	grpcServer := grpc.NewServer(
 		grpc.UnaryInterceptor(grpcmw.UnaryTraceInterceptor()),
